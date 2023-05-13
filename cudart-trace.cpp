@@ -3,8 +3,10 @@
 
 #include <assert.h>
 #include <dlfcn.h>
+#include <map>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string>
 
 #ifdef HAVE_BOOST
 #include <boost/core/demangle.hpp>
@@ -13,6 +15,7 @@
 extern "C" {
 
 FILE *__cudart_trace_output_stream = nullptr;
+std::map<const void *, std::string> __cudart_trace_map_host_fun_to_name;
 
 void __attribute__((constructor)) init_cudart_trace() {
   char *output_file = getenv("CUDART_TRACE_OUTPUT_FILE");
@@ -35,8 +38,8 @@ cudaError_t cudaMalloc(void **devPtr, size_t size) {
   auto ret = orig(devPtr, size);
   auto after = *devPtr;
   fprintf(__cudart_trace_output_stream,
-          "> cudaMalloc(devPtr=%p(&%p -> &%p), size=%zu) = %d\n", devPtr,
-          before, after, size, ret);
+          "> cudaMalloc(devPtr=%p(%p -> %p), size=%zu) = %d\n", devPtr, before,
+          after, size, ret);
   return ret;
 }
 
@@ -67,11 +70,13 @@ cudaError_t cudaLaunchKernel(const char *hostFun, dim3 gridDim, dim3 blockDim,
   cudaLaunchKernel_type orig;
   orig = (cudaLaunchKernel_type)dlsym(RTLD_NEXT, "cudaLaunchKernel");
   auto ret = orig(hostFun, gridDim, blockDim, args, sharedMem, stream);
-  fprintf(__cudart_trace_output_stream,
-          "> cudaLaunchKernel(hostFun=%p, gridDim={%d, %d, %d}, blockDim={%d, "
-          "%d, %d}, args=%p, sharedMem=%zu, stream=%p) = %d\n",
-          hostFun, gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
-          blockDim.z, args, sharedMem, stream, ret);
+  fprintf(
+      __cudart_trace_output_stream,
+      "> cudaLaunchKernel(hostFun=%p(%s), gridDim={%d, %d, %d}, blockDim={%d, "
+      "%d, %d}, args=%p, sharedMem=%zu, stream=%p) = %d\n",
+      hostFun, __cudart_trace_map_host_fun_to_name[hostFun].c_str(), gridDim.x,
+      gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z, args, sharedMem,
+      stream, ret);
   return ret;
 }
 
@@ -181,6 +186,7 @@ void __cudaRegisterFunction(void **fatCubinHandle, const char *hostFun,
 #else
   const char *printDeviceName = deviceName;
 #endif
+  __cudart_trace_map_host_fun_to_name[hostFun] = printDeviceName;
   fprintf(
       __cudart_trace_output_stream,
       "> __cudaRegisterFunction(fatCubinHandle=%p, hostFun=%p, deviceFun=%p, "
