@@ -1,9 +1,24 @@
 #include "driver_types.h"
 #include "vector_types.h"
+
+#include <assert.h>
 #include <dlfcn.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 extern "C" {
+
+FILE *__cudart_trace_output_stream = nullptr;
+
+void __attribute__((constructor)) init_cudart_trace() {
+  char *output_file = getenv("CUDART_TRACE_OUTPUT_FILE");
+  if (output_file) {
+    __cudart_trace_output_stream = fopen(output_file, "w");
+    assert(__cudart_trace_output_stream);
+  } else {
+    __cudart_trace_output_stream = stderr;
+  }
+}
 
 // memory
 
@@ -15,8 +30,9 @@ cudaError_t cudaMalloc(void **devPtr, size_t size) {
   auto before = *devPtr;
   auto ret = orig(devPtr, size);
   auto after = *devPtr;
-  fprintf(stderr, "> cudaMalloc(devPtr=%p(&%p -> &%p), size=%zu) = %d\n",
-          devPtr, before, after, size, ret);
+  fprintf(__cudart_trace_output_stream,
+          "> cudaMalloc(devPtr=%p(&%p -> &%p), size=%zu) = %d\n", devPtr,
+          before, after, size, ret);
   return ret;
 }
 
@@ -28,8 +44,9 @@ cudaError_t cudaMemcpy(void *dst, const void *src, size_t count,
   cudaMemcpy_type orig;
   orig = (cudaMemcpy_type)dlsym(RTLD_NEXT, "cudaMemcpy");
   auto ret = orig(dst, src, count, kind);
-  fprintf(stderr, "> cudaMemcpy(dst=%p, src=%p, count=%zu, kind=%d) = %d\n",
-          dst, src, count, kind, ret);
+  fprintf(__cudart_trace_output_stream,
+          "> cudaMemcpy(dst=%p, src=%p, count=%zu, kind=%d) = %d\n", dst, src,
+          count, kind, ret);
   return ret;
 }
 
@@ -46,7 +63,7 @@ cudaError_t cudaLaunchKernel(const char *hostFun, dim3 gridDim, dim3 blockDim,
   cudaLaunchKernel_type orig;
   orig = (cudaLaunchKernel_type)dlsym(RTLD_NEXT, "cudaLaunchKernel");
   auto ret = orig(hostFun, gridDim, blockDim, args, sharedMem, stream);
-  fprintf(stderr,
+  fprintf(__cudart_trace_output_stream,
           "> cudaLaunchKernel(hostFun=%p, gridDim={%d, %d, %d}, blockDim={%d, "
           "%d, %d}, args=%p, sharedMem=%zu, stream=%p) = %d\n",
           hostFun, gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y,
@@ -64,7 +81,7 @@ unsigned __cudaPushCallConfiguration(dim3 gridDim, dim3 blockDim,
   orig = (__cudaPushCallConfiguration_type)dlsym(RTLD_NEXT,
                                                  "__cudaPushCallConfiguration");
   auto ret = orig(gridDim, blockDim, sharedMem, stream);
-  fprintf(stderr,
+  fprintf(__cudart_trace_output_stream,
           "> __cudaPushCallConfiguration(gridDim={%d, %d, %d}, blockDim={%d, "
           "%d, %d}, sharedMem=%zu, stream=%p) = %d\n",
           gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z,
@@ -86,7 +103,7 @@ unsigned __cudaPopCallConfiguration(dim3 *gridDim, dim3 *blockDim,
   auto gridDimAfter = *gridDim;
   auto blockDimAfter = *blockDim;
   size_t sharedMemAfter = *sharedMem;
-  fprintf(stderr,
+  fprintf(__cudart_trace_output_stream,
           "> __cudaPopCallConfiguration(gridDim=%p(->{%d, %d, %d}), "
           "blockDim=%p(->{%d, %d, %d}), "
           "sharedMem=%p(->%zu), stream=%p) = %d\n",
@@ -105,8 +122,8 @@ void **__cudaRegisterFatBinary(void **fatCubin) {
   orig =
       (__cudaRegisterFatBinary_type)dlsym(RTLD_NEXT, "__cudaRegisterFatBinary");
   auto ret = orig(fatCubin);
-  fprintf(stderr, "> __cudaRegisterFatBinary(fatCubin=%p) = %p\n", fatCubin,
-          ret);
+  fprintf(__cudart_trace_output_stream,
+          "> __cudaRegisterFatBinary(fatCubin=%p) = %p\n", fatCubin, ret);
   return ret;
 }
 
@@ -116,8 +133,8 @@ void __cudaRegisterFatBinaryEnd(void **fatCubinHandle) {
   __cudaRegisterFatBinaryEnd_type orig;
   orig = (__cudaRegisterFatBinaryEnd_type)dlsym(RTLD_NEXT,
                                                 "__cudaRegisterFatBinaryEnd");
-  fprintf(stderr, "> __cudaRegisterFatBinaryEnd(fatCubinHandle=%p)\n",
-          fatCubinHandle);
+  fprintf(__cudart_trace_output_stream,
+          "> __cudaRegisterFatBinaryEnd(fatCubinHandle=%p)\n", fatCubinHandle);
   return orig(fatCubinHandle);
 }
 
@@ -126,7 +143,8 @@ typedef void (*__cudaInitModule_type)(void **fatCubinHandle);
 void __cudaInitModule(void **fatCubinHandle) {
   __cudaInitModule_type orig;
   orig = (__cudaInitModule_type)dlsym(RTLD_NEXT, "__cudaInitModule");
-  fprintf(stderr, "> __cudaInitModule(fatCubinHandle=%p)\n", fatCubinHandle);
+  fprintf(__cudart_trace_output_stream,
+          "> __cudaInitModule(fatCubinHandle=%p)\n", fatCubinHandle);
   return orig(fatCubinHandle);
 }
 
@@ -136,8 +154,8 @@ void __cudaUnregisterFatBinary(void **fatCubinHandle) {
   __cudaUnregisterFatBinary_type orig;
   orig = (__cudaUnregisterFatBinary_type)dlsym(RTLD_NEXT,
                                                "__cudaUnregisterFatBinary");
-  fprintf(stderr, "> __cudaUnregisterFatBinary(fatCubinHandle=%p)\n",
-          fatCubinHandle);
+  fprintf(__cudart_trace_output_stream,
+          "> __cudaUnregisterFatBinary(fatCubinHandle=%p)\n", fatCubinHandle);
   return orig(fatCubinHandle);
 }
 
@@ -154,7 +172,7 @@ void __cudaRegisterFunction(void **fatCubinHandle, const char *hostFun,
   orig =
       (__cudaRegisterFunction_type)dlsym(RTLD_NEXT, "__cudaRegisterFunction");
   fprintf(
-      stderr,
+      __cudart_trace_output_stream,
       "> __cudaRegisterFunction(fatCubinHandle=%p, hostFun=%p, deviceFun=%p, "
       "deviceName=%s, thread_limit=%d, tid=%p, bid=%p, bDim=%p, gDim=%p, "
       "wSize=%p)\n",
@@ -172,7 +190,8 @@ cudaError_t cudaDeviceSynchronize() {
   cudaDeviceSynchronize_type orig;
   orig = (cudaDeviceSynchronize_type)dlsym(RTLD_NEXT, "cudaDeviceSynchronize");
   auto ret = orig();
-  fprintf(stderr, "> cudaDeviceSynchronize() = %d\n", ret);
+  fprintf(__cudart_trace_output_stream, "> cudaDeviceSynchronize() = %d\n",
+          ret);
   return ret;
 }
 
@@ -182,7 +201,7 @@ cudaError_t cudaDeviceReset() {
   cudaDeviceReset_type orig;
   orig = (cudaDeviceReset_type)dlsym(RTLD_NEXT, "cudaDeviceReset");
   auto ret = orig();
-  fprintf(stderr, "> cudaDeviceReset() = %d\n", ret);
+  fprintf(__cudart_trace_output_stream, "> cudaDeviceReset() = %d\n", ret);
   return ret;
 }
 }

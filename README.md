@@ -20,3 +20,7 @@ Run CUDA applications with LD_PRELOAD:
 ```shell
 LD_PRELOAD=./build/libcudart-trace.so python3 -c "import torch"
 ```
+
+Customization via environment variables:
+
+- `CUDART_TRACE_OUTPUT_FILE=log`: Print trace to file instead of stderr
