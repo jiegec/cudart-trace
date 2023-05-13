@@ -6,6 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef HAVE_BOOST
+#include <boost/core/demangle.hpp>
+#endif
+
 extern "C" {
 
 FILE *__cudart_trace_output_stream = nullptr;
@@ -171,13 +175,19 @@ void __cudaRegisterFunction(void **fatCubinHandle, const char *hostFun,
   __cudaRegisterFunction_type orig;
   orig =
       (__cudaRegisterFunction_type)dlsym(RTLD_NEXT, "__cudaRegisterFunction");
+#ifdef HAVE_BOOST
+  std::string demangled = boost::core::demangle(deviceName);
+  const char *printDeviceName = demangled.c_str();
+#else
+  const char *printDeviceName = deviceName;
+#endif
   fprintf(
       __cudart_trace_output_stream,
       "> __cudaRegisterFunction(fatCubinHandle=%p, hostFun=%p, deviceFun=%p, "
       "deviceName=%s, thread_limit=%d, tid=%p, bid=%p, bDim=%p, gDim=%p, "
       "wSize=%p)\n",
-      fatCubinHandle, hostFun, deviceFun, deviceName, thread_limit, tid, bid,
-      bDim, gDim, wSize);
+      fatCubinHandle, hostFun, deviceFun, printDeviceName, thread_limit, tid,
+      bid, bDim, gDim, wSize);
   return orig(fatCubinHandle, hostFun, deviceFun, deviceName, thread_limit, tid,
               bid, bDim, gDim, wSize);
 }
