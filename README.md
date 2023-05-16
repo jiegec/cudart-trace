@@ -1,6 +1,6 @@
 # cudart-trace
 
-Trace calls to cudart.
+Trace calls to cudart. You can use this tool to locate kernels from dynamic libraries (e.g. from torch).
 
 ## Building
 
